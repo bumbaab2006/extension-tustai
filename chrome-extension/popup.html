@@ -1,0 +1,306 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      :root {
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --accent: #2563eb;
+        --accent-strong: #1d4ed8;
+        --accent-soft: #e0e7ff;
+        --success: #10b981;
+        --danger: #ef4444;
+        --warning: #f59e0b;
+        --shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 360px;
+        margin: 0;
+        background: var(--bg);
+        font-family: "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui,
+          -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+        color: var(--text);
+      }
+
+      .app {
+        padding: 14px;
+      }
+
+      .header {
+        position: relative;
+        background: linear-gradient(140deg, #2563eb 0%, #06b6d4 100%);
+        border-radius: 16px;
+        padding: 16px;
+        color: #fff;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .header::after {
+        content: "";
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        right: -50px;
+        top: -40px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.15);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .logo {
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.2);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .brand p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        opacity: 0.85;
+      }
+
+      .shell {
+        background: var(--card);
+        border-radius: 16px;
+        margin-top: 12px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      h3 {
+        margin: 0 0 10px;
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      p {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 6px 0;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(16, 185, 129, 0.15);
+        color: #059669;
+      }
+
+      .status-pill::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 14px 0;
+      }
+
+      input {
+        width: 100%;
+        padding: 11px 12px;
+        margin: 6px 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        font-size: 13px;
+        outline: none;
+        background: #fff;
+        transition: border 0.15s, box-shadow 0.15s;
+      }
+
+      input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+      }
+
+      button {
+        width: 100%;
+        border: none;
+        border-radius: 12px;
+        padding: 11px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        margin-top: 8px;
+        cursor: pointer;
+        background: var(--accent);
+        color: white;
+        transition: transform 0.05s, box-shadow 0.15s;
+        box-shadow: 0 10px 16px rgba(37, 99, 235, 0.2);
+      }
+
+      button:hover {
+        background: var(--accent-strong);
+      }
+
+      button:active {
+        transform: scale(0.98);
+      }
+
+      button.secondary {
+        background: #f1f5f9;
+        color: var(--text);
+        box-shadow: none;
+      }
+
+      button.secondary:hover {
+        background: #e2e8f0;
+      }
+
+      button.danger {
+        background: var(--danger);
+        box-shadow: 0 10px 16px rgba(239, 68, 68, 0.2);
+      }
+
+      .child-btn {
+        background: #f8fafc;
+        color: var(--text);
+        border: 1px solid var(--border);
+        margin-bottom: 8px;
+        box-shadow: none;
+        text-align: left;
+        padding: 12px 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .child-btn::after {
+        content: "→";
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .child-btn:hover {
+        background: #eef2ff;
+      }
+
+      .error {
+        color: var(--danger);
+        font-size: 12px;
+        margin-top: 6px;
+      }
+
+      #active-user-name {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text);
+        margin: 8px 0 4px;
+      }
+
+      .footer {
+        margin-top: 12px;
+        font-size: 11px;
+        color: var(--muted);
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="app">
+      <div class="header">
+        <div class="brand">
+          <div class="logo">SK</div>
+          <div>
+            <h1>SafeKid</h1>
+            <p>Parent control extension</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="shell">
+        <div id="view-parent-login" class="hidden">
+          <h3>Эцэг эхийн нэвтрэх</h3>
+          <p>Хяналт идэвхжүүлэхийн тулд бүртгэлээ ашиглана уу.</p>
+          <input type="email" id="p-email" placeholder="И-мэйл" />
+          <input type="password" id="p-pass" placeholder="Нууц үг" />
+          <button id="btn-p-login">Нэвтрэх</button>
+          <p class="error" id="err-login"></p>
+        </div>
+
+        <div id="view-child-select" class="hidden">
+          <h3>Хэн хэрэглэх вэ?</h3>
+          <div class="status-pill">Холболт идэвхтэй</div>
+          <div id="child-list" style="margin-top: 12px"></div>
+          <div class="divider"></div>
+          <button id="btn-p-logout" class="danger">Эцэг эх гарах</button>
+        </div>
+
+        <div id="view-pin" class="hidden">
+          <h3 id="pin-title">PIN код</h3>
+          <p>Хүүхдийн нэвтрэлтийг баталгаажуулна уу.</p>
+          <input
+            type="password"
+            id="child-pin"
+            placeholder="4 оронтой PIN"
+            maxlength="4"
+          />
+          <button id="btn-verify-pin">Эхлүүлэх</button>
+          <button id="btn-back-select" class="secondary">Буцах</button>
+          <p class="error" id="err-pin"></p>
+        </div>
+
+        <div id="view-dashboard" class="hidden">
+          <h3>Хамгаалалт идэвхтэй</h3>
+          <div id="active-user-name">User</div>
+          <p>Бодит цагийн хяналт ажиллаж байна.</p>
+          <button id="btn-switch-user" class="secondary">Хэрэглэгч солих</button>
+        </div>
+
+        <div id="view-logout-confirm" class="hidden">
+          <h3>Баталгаажуулалт</h3>
+          <p>Эцэг эхийн нууц үг оруулна уу</p>
+          <input type="password" id="logout-pass" placeholder="Нууц үг" />
+          <button id="btn-confirm-logout" class="danger">Гарах</button>
+          <button id="btn-cancel-logout" class="secondary">Болих</button>
+          <p class="error" id="err-logout"></p>
+        </div>
+      </div>
+
+      <div class="footer">SafeKid Extension · v1.0</div>
+    </div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

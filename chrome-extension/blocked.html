@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Сайт хаагдсан</title>
+    <style>
+      :root {
+        --bg: #f5f7fb;
+        --card: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --danger: #ef4444;
+        --danger-soft: #fee2e2;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        font-family: "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui,
+          -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+        color: var(--text);
+      }
+
+      .card {
+        background: var(--card);
+        padding: 40px 36px;
+        border-radius: 20px;
+        box-shadow: 0 30px 60px rgba(15, 23, 42, 0.15);
+        text-align: center;
+        max-width: 520px;
+        border: 1px solid var(--danger-soft);
+      }
+
+      .icon {
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 16px;
+        border-radius: 20px;
+        background: var(--danger-soft);
+        color: var(--danger);
+        display: grid;
+        place-items: center;
+        font-size: 32px;
+        font-weight: 700;
+      }
+
+      h1 {
+        font-size: 28px;
+        margin: 0 0 10px;
+        font-weight: 700;
+        color: var(--danger);
+      }
+
+      p {
+        font-size: 15px;
+        color: var(--muted);
+        margin: 6px 0;
+        line-height: 1.6;
+      }
+
+      .notice {
+        margin-top: 16px;
+        padding: 10px 14px;
+        background: var(--danger-soft);
+        border-radius: 12px;
+        font-size: 13px;
+        color: var(--danger);
+        font-weight: 600;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="card">
+      <div class="icon">⛔</div>
+      <h1>Сайт хаагдсан</h1>
+      <p>
+        Энэ сайт хүүхдэд тохирохгүй гэж
+        <strong>AI хамгаалалт</strong>
+        илрүүлсэн тул хандалтыг хаалаа.
+      </p>
+      <p>Та зөвшөөрөл хүсвэл эцэг эхийн апп дээр хандана уу.</p>
+      <div class="notice">Эцэг эхэд мэдэгдэл илгээгдсэн.</div>
+    </div>
+  </body>
+</html>
