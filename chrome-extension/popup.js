@@ -1,6 +1,70 @@
-const API_BASE = "https://parent-panel-backend.onrender.com/api/auth";
+const DEFAULT_AUTH_BASES = [
+  "https://parent-panel-backend.onrender.com/api/auth",
+  "http://localhost:5000/api/auth",
+  "http://127.0.0.1:5000/api/auth",
+];
 
-// DOM Elements
+function normalizeBase(value) {
+  return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+}
+
+function toApiBase(authBase) {
+  return authBase.replace(/\/auth$/, "");
+}
+
+async function getAuthBaseCandidates() {
+  const { authApiBaseUrl } = await chrome.storage.local.get(["authApiBaseUrl"]);
+  const configured = normalizeBase(authApiBaseUrl);
+  const seen = new Set();
+  const bases = [];
+
+  if (configured) {
+    seen.add(configured);
+    bases.push(configured);
+  }
+
+  DEFAULT_AUTH_BASES.forEach((base) => {
+    const normalized = normalizeBase(base);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    bases.push(normalized);
+  });
+
+  return bases;
+}
+
+async function fetchAuthWithFailover(path, options) {
+  const bases = await getAuthBaseCandidates();
+  let lastError = null;
+
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}${path}`, options);
+      if (response.status === 404 || response.status === 405) {
+        continue;
+      }
+
+      await chrome.storage.local.set({
+        authApiBaseUrl: base,
+        apiBaseUrl: toApiBase(base),
+      });
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("Auth server unreachable");
+}
+
+async function readJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
+
 const views = {
   parentLogin: document.getElementById("view-parent-login"),
   childSelect: document.getElementById("view-child-select"),
@@ -9,9 +73,8 @@ const views = {
   logoutConfirm: document.getElementById("view-logout-confirm"),
 };
 
-let selectedChildTemp = null; // PIN хийхээр сонгосон хүүхэд
+let selectedChildTemp = null;
 
-// Init
 document.addEventListener("DOMContentLoaded", async () => {
   const data = await chrome.storage.local.get([
     "parentToken",
@@ -32,38 +95,46 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 });
 
-// --- ACTIONS ---
-
-// 1. Parent Login
 document.getElementById("btn-p-login").onclick = async () => {
-  const email = document.getElementById("p-email").value;
+  const email = document.getElementById("p-email").value.trim().toLowerCase();
   const password = document.getElementById("p-pass").value;
   const errBox = document.getElementById("err-login");
+  errBox.innerText = "";
+
+  if (!email || !password) {
+    errBox.innerText = "И-мэйл болон нууц үгээ оруулна уу";
+    return;
+  }
 
   try {
-    const res = await fetch(`${API_BASE}/parent-login`, {
+    const res = await fetchAuthWithFailover("/parent-login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
-    const data = await res.json();
+    const data = await readJsonSafe(res);
 
-    if (data.success) {
+    if (res.ok && data.success) {
       chrome.storage.local.set({
         parentToken: data.token,
-        childrenList: data.children, // [{id:1, name:"Bat"}, ...]
+        childrenList: Array.isArray(data.children) ? data.children : [],
       });
-      renderChildList(data.children);
+      renderChildList(Array.isArray(data.children) ? data.children : []);
       showView("childSelect");
     } else {
-      errBox.innerText = data.message || "Нэвтрэх бүтсэнгүй";
+      errBox.innerText =
+        data.message ||
+        data.error ||
+        (res.status === 401
+          ? "И-мэйл эсвэл нууц үг буруу байна"
+          : "Нэвтрэх бүтсэнгүй");
     }
-  } catch (e) {
-    errBox.innerText = "Сервертэй холбогдож чадсангүй";
+  } catch {
+    errBox.innerText =
+      "Сервертэй холбогдож чадсангүй. Backend ажиллаж байгаа эсэхийг шалгана уу.";
   }
 };
 
-// 2. Child Select & PIN
 function renderChildList(children) {
   const container = document.getElementById("child-list");
   container.innerHTML = "";
@@ -83,18 +154,24 @@ function renderChildList(children) {
 }
 
 document.getElementById("btn-verify-pin").onclick = async () => {
-  const pin = document.getElementById("child-pin").value;
+  const pin = document.getElementById("child-pin").value.trim();
   const errBox = document.getElementById("err-pin");
+  errBox.innerText = "";
+
+  if (!selectedChildTemp?.id) {
+    errBox.innerText = "Хүүхдээ эхлээд сонгоно уу";
+    return;
+  }
 
   try {
-    const res = await fetch(`${API_BASE}/verify-pin`, {
+    const res = await fetchAuthWithFailover("/verify-pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ childId: selectedChildTemp.id, pin }),
     });
-    const data = await res.json();
+    const data = await readJsonSafe(res);
 
-    if (data.success) {
+    if (res.ok && data.success) {
       chrome.storage.local.set({
         activeChildId: selectedChildTemp.id,
         activeChildName: selectedChildTemp.name,
@@ -103,14 +180,15 @@ document.getElementById("btn-verify-pin").onclick = async () => {
         selectedChildTemp.name;
       showView("dashboard");
 
-      // "Login Required" хуудсыг хаах эсвэл refresh хийх
       chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-        chrome.tabs.reload(tabs[0].id);
+        if (tabs[0]?.id) {
+          chrome.tabs.reload(tabs[0].id);
+        }
       });
     } else {
-      errBox.innerText = "PIN код буруу байна";
+      errBox.innerText = data.message || "PIN код буруу байна";
     }
-  } catch (e) {
+  } catch {
     errBox.innerText = "Алдаа гарлаа";
   }
 };
@@ -118,34 +196,28 @@ document.getElementById("btn-verify-pin").onclick = async () => {
 document.getElementById("btn-back-select").onclick = () =>
   showView("childSelect");
 
-// 3. Switch User (Logout Child only)
 document.getElementById("btn-switch-user").onclick = () => {
   chrome.storage.local.remove(["activeChildId", "activeChildName"], () => {
     showView("childSelect");
-    // Reload current tab to force block
     chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      chrome.tabs.reload(tabs[0].id);
+      if (tabs[0]?.id) {
+        chrome.tabs.reload(tabs[0].id);
+      }
     });
   });
 };
 
-// 4. Parent Logout (Full Logout)
 document.getElementById("btn-p-logout").onclick = () =>
   showView("logoutConfirm");
 document.getElementById("btn-cancel-logout").onclick = () =>
   showView("childSelect");
 
 document.getElementById("btn-confirm-logout").onclick = async () => {
-  const password = document.getElementById("logout-pass").value;
-  // Password verify API дуудна (Security)
-  // ... (API call simulation)
-  // if success:
   chrome.storage.local.clear(() => {
-    location.reload(); // Reset popup
+    location.reload();
   });
 };
 
-// Helper: View Switcher
 function showView(viewName) {
   Object.values(views).forEach((el) => el.classList.add("hidden"));
   views[viewName].classList.remove("hidden");

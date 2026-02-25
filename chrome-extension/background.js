@@ -1,4 +1,8 @@
-const BASE_URL = "https://parent-panel-backend.onrender.com/api";
+const DEFAULT_API_BASES = [
+  "https://parent-panel-backend.onrender.com/api",
+  "http://localhost:5000/api",
+  "http://127.0.0.1:5000/api",
+];
 const PING_INTERVAL_MS = 60000; // Сервер рүү 60 сек тутам batch илгээх
 const TICK_INTERVAL_MS = 5000; // 5 сек тутам локалд хугацаа нэмэх
 
@@ -12,6 +16,63 @@ let lastFlushAt = 0; // Сүүлийн сервер рүү илгээсэн ца
 let isFlushing = false;
 
 console.log("🚀 Background Monitor Loaded (Domain-Based Tracking)");
+
+function normalizeBase(value) {
+  return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+}
+
+async function getApiBaseCandidates() {
+  const { apiBaseUrl } = await chrome.storage.local.get(["apiBaseUrl"]);
+  const configured = normalizeBase(apiBaseUrl);
+  const seen = new Set();
+  const bases = [];
+
+  if (configured) {
+    seen.add(configured);
+    bases.push(configured);
+  }
+
+  DEFAULT_API_BASES.forEach((base) => {
+    const normalized = normalizeBase(base);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    bases.push(normalized);
+  });
+
+  return bases;
+}
+
+async function fetchApiWithFailover(path, options) {
+  const bases = await getApiBaseCandidates();
+  let lastError = null;
+
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}${path}`, options);
+      if (response.status === 404 || response.status === 405) {
+        continue;
+      }
+
+      await chrome.storage.local.set({
+        apiBaseUrl: base,
+        authApiBaseUrl: `${base}/auth`,
+      });
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error("API server unreachable");
+}
+
+async function readJsonSafe(response) {
+  try {
+    return await response.json();
+  } catch {
+    return {};
+  }
+}
 
 // Туслах функц: URL-аас домайныг ялгаж авах
 function getDomain(url) {
@@ -39,12 +100,14 @@ chrome.webNavigation.onBeforeNavigate.addListener(
     if (!storage.activeChildId) return;
 
     try {
-      const res = await fetch(`${BASE_URL}/check-url`, {
+      const res = await fetchApiWithFailover("/check-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ childId: storage.activeChildId, url: url }),
       });
-      const data = await res.json();
+      if (!res.ok) return;
+
+      const data = await readJsonSafe(res);
       if (data.action === "BLOCK") {
         chrome.tabs.update(details.tabId, {
           url: chrome.runtime.getURL("blocked.html"),
@@ -194,7 +257,7 @@ async function sendPing(url, tabId, durationSeconds, reason) {
 
     console.log(`📡 Sending ${durationSeconds}s Data (${reason}): ${url}`);
 
-    const response = await fetch(`${BASE_URL}/track-time`, {
+    const response = await fetchApiWithFailover("/track-time", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -204,7 +267,11 @@ async function sendPing(url, tabId, durationSeconds, reason) {
       }),
     });
 
-    const data = await response.json();
+    if (!response.ok) {
+      return false;
+    }
+
+    const data = await readJsonSafe(response);
 
     if (data.status === "BLOCK") {
       await stopTracking();
