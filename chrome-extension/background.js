@@ -42,25 +42,41 @@ async function getApiBaseCandidates() {
   return bases;
 }
 
-async function fetchApiWithFailover(path, options) {
+async function cacheSelectedApiBase(base) {
+  await chrome.storage.local.set({
+    apiBaseUrl: base,
+    authApiBaseUrl: `${base}/auth`,
+  });
+}
+
+async function fetchApiWithFailover(path, options, config = {}) {
+  const { continueOnStatuses = [404, 405] } = config;
+
   const bases = await getApiBaseCandidates();
   let lastError = null;
+  let lastResponse = null;
 
   for (const base of bases) {
     try {
       const response = await fetch(`${base}${path}`, options);
-      if (response.status === 404 || response.status === 405) {
+      if (response.ok) {
+        await cacheSelectedApiBase(base);
+        return response;
+      }
+
+      if (continueOnStatuses.includes(response.status)) {
+        lastResponse = response;
         continue;
       }
 
-      await chrome.storage.local.set({
-        apiBaseUrl: base,
-        authApiBaseUrl: `${base}/auth`,
-      });
       return response;
     } catch (error) {
       lastError = error;
     }
+  }
+
+  if (lastResponse) {
+    return lastResponse;
   }
 
   throw lastError || new Error("API server unreachable");
@@ -100,11 +116,15 @@ chrome.webNavigation.onBeforeNavigate.addListener(
     if (!storage.activeChildId) return;
 
     try {
-      const res = await fetchApiWithFailover("/check-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ childId: storage.activeChildId, url: url }),
-      });
+      const res = await fetchApiWithFailover(
+        "/check-url",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ childId: storage.activeChildId, url: url }),
+        },
+        { continueOnStatuses: [401, 404, 405] },
+      );
       if (!res.ok) return;
 
       const data = await readJsonSafe(res);
@@ -257,15 +277,19 @@ async function sendPing(url, tabId, durationSeconds, reason) {
 
     console.log(`📡 Sending ${durationSeconds}s Data (${reason}): ${url}`);
 
-    const response = await fetchApiWithFailover("/track-time", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        childId: storage.activeChildId,
-        url: url,
-        duration: durationSeconds,
-      }),
-    });
+    const response = await fetchApiWithFailover(
+      "/track-time",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          childId: storage.activeChildId,
+          url: url,
+          duration: durationSeconds,
+        }),
+      },
+      { continueOnStatuses: [401, 404, 405] },
+    );
 
     if (!response.ok) {
       return false;

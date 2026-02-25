@@ -12,13 +12,13 @@ function toApiBase(authBase) {
   return authBase.replace(/\/auth$/, "");
 }
 
-async function getAuthBaseCandidates() {
+async function getAuthBaseCandidates(preferStored = true) {
   const { authApiBaseUrl } = await chrome.storage.local.get(["authApiBaseUrl"]);
   const configured = normalizeBase(authApiBaseUrl);
   const seen = new Set();
   const bases = [];
 
-  if (configured) {
+  if (preferStored && configured) {
     seen.add(configured);
     bases.push(configured);
   }
@@ -30,28 +30,51 @@ async function getAuthBaseCandidates() {
     bases.push(normalized);
   });
 
+  if (!preferStored && configured && !seen.has(configured)) {
+    bases.push(configured);
+  }
+
   return bases;
 }
 
-async function fetchAuthWithFailover(path, options) {
-  const bases = await getAuthBaseCandidates();
+async function cacheSelectedAuthBase(base) {
+  await chrome.storage.local.set({
+    authApiBaseUrl: base,
+    apiBaseUrl: toApiBase(base),
+  });
+}
+
+async function fetchAuthWithFailover(path, options, config = {}) {
+  const {
+    continueOnStatuses = [404, 405],
+    preferStored = true,
+  } = config;
+
+  const bases = await getAuthBaseCandidates(preferStored);
   let lastError = null;
+  let lastResponse = null;
 
   for (const base of bases) {
     try {
       const response = await fetch(`${base}${path}`, options);
-      if (response.status === 404 || response.status === 405) {
+      if (response.ok) {
+        await cacheSelectedAuthBase(base);
+        return response;
+      }
+
+      if (continueOnStatuses.includes(response.status)) {
+        lastResponse = response;
         continue;
       }
 
-      await chrome.storage.local.set({
-        authApiBaseUrl: base,
-        apiBaseUrl: toApiBase(base),
-      });
       return response;
     } catch (error) {
       lastError = error;
     }
+  }
+
+  if (lastResponse) {
+    return lastResponse;
   }
 
   throw lastError || new Error("Auth server unreachable");
@@ -96,39 +119,62 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 document.getElementById("btn-p-login").onclick = async () => {
-  const email = document.getElementById("p-email").value.trim().toLowerCase();
+  const rawEmail = document.getElementById("p-email").value.trim();
   const password = document.getElementById("p-pass").value;
   const errBox = document.getElementById("err-login");
   errBox.innerText = "";
 
-  if (!email || !password) {
+  if (!rawEmail || !password) {
     errBox.innerText = "И-мэйл болон нууц үгээ оруулна уу";
     return;
   }
 
-  try {
-    const res = await fetchAuthWithFailover("/parent-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await readJsonSafe(res);
+  const lowerEmail = rawEmail.toLowerCase();
+  const emailCandidates = rawEmail === lowerEmail ? [rawEmail] : [rawEmail, lowerEmail];
 
-    if (res.ok && data.success) {
-      chrome.storage.local.set({
-        parentToken: data.token,
-        childrenList: Array.isArray(data.children) ? data.children : [],
-      });
-      renderChildList(Array.isArray(data.children) ? data.children : []);
-      showView("childSelect");
-    } else {
-      errBox.innerText =
-        data.message ||
-        data.error ||
-        (res.status === 401
-          ? "И-мэйл эсвэл нууц үг буруу байна"
-          : "Нэвтрэх бүтсэнгүй");
+  try {
+    let lastResponse = null;
+    let lastData = {};
+
+    for (const email of emailCandidates) {
+      const res = await fetchAuthWithFailover(
+        "/parent-login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        },
+        {
+          // If one backend has different DB and returns 401, try other known backends too.
+          continueOnStatuses: [401, 404, 405],
+          preferStored: false,
+        },
+      );
+
+      const data = await readJsonSafe(res);
+      if (res.ok && data.success) {
+        chrome.storage.local.set({
+          parentToken: data.token,
+          childrenList: Array.isArray(data.children) ? data.children : [],
+        });
+        renderChildList(Array.isArray(data.children) ? data.children : []);
+        showView("childSelect");
+        return;
+      }
+
+      lastResponse = res;
+      lastData = data;
+      if (res.status !== 401) {
+        break;
+      }
     }
+
+    errBox.innerText =
+      lastData.message ||
+      lastData.error ||
+      (lastResponse?.status === 401
+        ? "И-мэйл эсвэл нууц үг буруу байна"
+        : "Нэвтрэх бүтсэнгүй");
   } catch {
     errBox.innerText =
       "Сервертэй холбогдож чадсангүй. Backend ажиллаж байгаа эсэхийг шалгана уу.";
@@ -164,11 +210,15 @@ document.getElementById("btn-verify-pin").onclick = async () => {
   }
 
   try {
-    const res = await fetchAuthWithFailover("/verify-pin", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ childId: selectedChildTemp.id, pin }),
-    });
+    const res = await fetchAuthWithFailover(
+      "/verify-pin",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ childId: selectedChildTemp.id, pin }),
+      },
+      { continueOnStatuses: [401, 404, 405] },
+    );
     const data = await readJsonSafe(res);
 
     if (res.ok && data.success) {
