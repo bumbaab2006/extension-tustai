@@ -1,8 +1,4 @@
-const DEFAULT_API_BASES = [
-  "https://parent-panel-backend.onrender.com/api",
-  "http://localhost:5000/api",
-  "http://127.0.0.1:5000/api",
-];
+const BASE_URL = "https://parent-panel-backend.onrender.com/api";
 const PING_INTERVAL_MS = 60000; // Сервер рүү 60 сек тутам batch илгээх
 const TICK_INTERVAL_MS = 5000; // 5 сек тутам локалд хугацаа нэмэх
 
@@ -16,71 +12,6 @@ let lastFlushAt = 0; // Сүүлийн сервер рүү илгээсэн ца
 let isFlushing = false;
 
 console.log("🚀 Background Monitor Loaded (Domain-Based Tracking)");
-
-function normalizeBase(value) {
-  return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
-}
-
-async function getApiBaseCandidates() {
-  const { apiBaseUrl } = await chrome.storage.local.get(["apiBaseUrl"]);
-  const configured = normalizeBase(apiBaseUrl);
-  const seen = new Set();
-  const bases = [];
-
-  if (configured) {
-    seen.add(configured);
-    bases.push(configured);
-  }
-
-  DEFAULT_API_BASES.forEach((base) => {
-    const normalized = normalizeBase(base);
-    if (!normalized || seen.has(normalized)) return;
-    seen.add(normalized);
-    bases.push(normalized);
-  });
-
-  return bases;
-}
-
-async function cacheSelectedApiBase(base) {
-  await chrome.storage.local.set({
-    apiBaseUrl: base,
-    authApiBaseUrl: `${base}/auth`,
-  });
-}
-
-async function fetchApiWithFailover(path, options, config = {}) {
-  const { continueOnStatuses = [404, 405] } = config;
-
-  const bases = await getApiBaseCandidates();
-  let lastError = null;
-  let lastResponse = null;
-
-  for (const base of bases) {
-    try {
-      const response = await fetch(`${base}${path}`, options);
-      if (response.ok) {
-        await cacheSelectedApiBase(base);
-        return response;
-      }
-
-      if (continueOnStatuses.includes(response.status)) {
-        lastResponse = response;
-        continue;
-      }
-
-      return response;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastResponse) {
-    return lastResponse;
-  }
-
-  throw lastError || new Error("API server unreachable");
-}
 
 async function readJsonSafe(response) {
   try {
@@ -102,7 +33,7 @@ function getDomain(url) {
 
 // 1. Browser эхлэх үед
 chrome.runtime.onStartup.addListener(() => {
-  chrome.storage.local.remove("activeChildId");
+  chrome.storage.local.remove(["activeChildId", "authApiBaseUrl", "apiBaseUrl"]);
 });
 
 // 2. Navigation Monitor (Сайт руу орох үед БЛОК хийх эсэхийг шалгах)
@@ -116,15 +47,11 @@ chrome.webNavigation.onBeforeNavigate.addListener(
     if (!storage.activeChildId) return;
 
     try {
-      const res = await fetchApiWithFailover(
-        "/check-url",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ childId: storage.activeChildId, url: url }),
-        },
-        { continueOnStatuses: [401, 404, 405] },
-      );
+      const res = await fetch(`${BASE_URL}/check-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ childId: storage.activeChildId, url: url }),
+      });
       if (!res.ok) return;
 
       const data = await readJsonSafe(res);
@@ -277,19 +204,15 @@ async function sendPing(url, tabId, durationSeconds, reason) {
 
     console.log(`📡 Sending ${durationSeconds}s Data (${reason}): ${url}`);
 
-    const response = await fetchApiWithFailover(
-      "/track-time",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          childId: storage.activeChildId,
-          url: url,
-          duration: durationSeconds,
-        }),
-      },
-      { continueOnStatuses: [401, 404, 405] },
-    );
+    const response = await fetch(`${BASE_URL}/track-time`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        childId: storage.activeChildId,
+        url: url,
+        duration: durationSeconds,
+      }),
+    });
 
     if (!response.ok) {
       return false;

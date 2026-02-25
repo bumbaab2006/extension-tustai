@@ -1,84 +1,4 @@
-const DEFAULT_AUTH_BASES = [
-  "https://parent-panel-backend.onrender.com/api/auth",
-  "http://localhost:5000/api/auth",
-  "http://127.0.0.1:5000/api/auth",
-];
-
-function normalizeBase(value) {
-  return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
-}
-
-function toApiBase(authBase) {
-  return authBase.replace(/\/auth$/, "");
-}
-
-async function getAuthBaseCandidates(preferStored = true) {
-  const { authApiBaseUrl } = await chrome.storage.local.get(["authApiBaseUrl"]);
-  const configured = normalizeBase(authApiBaseUrl);
-  const seen = new Set();
-  const bases = [];
-
-  if (preferStored && configured) {
-    seen.add(configured);
-    bases.push(configured);
-  }
-
-  DEFAULT_AUTH_BASES.forEach((base) => {
-    const normalized = normalizeBase(base);
-    if (!normalized || seen.has(normalized)) return;
-    seen.add(normalized);
-    bases.push(normalized);
-  });
-
-  if (!preferStored && configured && !seen.has(configured)) {
-    bases.push(configured);
-  }
-
-  return bases;
-}
-
-async function cacheSelectedAuthBase(base) {
-  await chrome.storage.local.set({
-    authApiBaseUrl: base,
-    apiBaseUrl: toApiBase(base),
-  });
-}
-
-async function fetchAuthWithFailover(path, options, config = {}) {
-  const {
-    continueOnStatuses = [404, 405],
-    preferStored = true,
-  } = config;
-
-  const bases = await getAuthBaseCandidates(preferStored);
-  let lastError = null;
-  let lastResponse = null;
-
-  for (const base of bases) {
-    try {
-      const response = await fetch(`${base}${path}`, options);
-      if (response.ok) {
-        await cacheSelectedAuthBase(base);
-        return response;
-      }
-
-      if (continueOnStatuses.includes(response.status)) {
-        lastResponse = response;
-        continue;
-      }
-
-      return response;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  if (lastResponse) {
-    return lastResponse;
-  }
-
-  throw lastError || new Error("Auth server unreachable");
-}
+const AUTH_API_BASE = "https://parent-panel-backend.onrender.com/api/auth";
 
 async function readJsonSafe(response) {
   try {
@@ -130,28 +50,21 @@ document.getElementById("btn-p-login").onclick = async () => {
   }
 
   const lowerEmail = rawEmail.toLowerCase();
-  const emailCandidates = rawEmail === lowerEmail ? [rawEmail] : [rawEmail, lowerEmail];
+  const emailCandidates =
+    rawEmail === lowerEmail ? [rawEmail] : [rawEmail, lowerEmail];
 
   try {
     let lastResponse = null;
     let lastData = {};
 
     for (const email of emailCandidates) {
-      const res = await fetchAuthWithFailover(
-        "/parent-login",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        },
-        {
-          // If one backend has different DB and returns 401, try other known backends too.
-          continueOnStatuses: [401, 404, 405],
-          preferStored: false,
-        },
-      );
-
+      const res = await fetch(`${AUTH_API_BASE}/parent-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
       const data = await readJsonSafe(res);
+
       if (res.ok && data.success) {
         chrome.storage.local.set({
           parentToken: data.token,
@@ -210,15 +123,11 @@ document.getElementById("btn-verify-pin").onclick = async () => {
   }
 
   try {
-    const res = await fetchAuthWithFailover(
-      "/verify-pin",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ childId: selectedChildTemp.id, pin }),
-      },
-      { continueOnStatuses: [401, 404, 405] },
-    );
+    const res = await fetch(`${AUTH_API_BASE}/verify-pin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ childId: selectedChildTemp.id, pin }),
+    });
     const data = await readJsonSafe(res);
 
     if (res.ok && data.success) {
