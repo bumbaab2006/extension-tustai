@@ -21,6 +21,7 @@ let selectedChildTemp = null;
 document.addEventListener("DOMContentLoaded", async () => {
   const data = await chrome.storage.local.get([
     "parentToken",
+    "parentEmail",
     "activeChildId",
     "activeChildName",
     "childrenList",
@@ -68,6 +69,7 @@ document.getElementById("btn-p-login").onclick = async () => {
       if (res.ok && data.success) {
         chrome.storage.local.set({
           parentToken: data.token,
+          parentEmail: email,
           childrenList: Array.isArray(data.children) ? data.children : [],
         });
         renderChildList(Array.isArray(data.children) ? data.children : []);
@@ -168,13 +170,45 @@ document.getElementById("btn-switch-user").onclick = () => {
 
 document.getElementById("btn-p-logout").onclick = () =>
   showView("logoutConfirm");
-document.getElementById("btn-cancel-logout").onclick = () =>
+document.getElementById("btn-cancel-logout").onclick = () => {
+  document.getElementById("err-logout").innerText = "";
   showView("childSelect");
+};
 
 document.getElementById("btn-confirm-logout").onclick = async () => {
-  chrome.storage.local.clear(() => {
-    location.reload();
-  });
+  const password = document.getElementById("logout-pass").value.trim();
+  const errBox = document.getElementById("err-logout");
+  errBox.innerText = "";
+
+  if (!password) {
+    errBox.innerText = "Нууц үгээ оруулна уу";
+    return;
+  }
+
+  const storage = await chrome.storage.local.get(["parentEmail"]);
+  if (!storage.parentEmail) {
+    errBox.innerText = "Имэйл олдсонгүй. Дахин нэвтэрнэ үү.";
+    return;
+  }
+
+  try {
+    const res = await fetch(`${AUTH_API_BASE}/verify-parent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: storage.parentEmail, password }),
+    });
+    const data = await readJsonSafe(res);
+    if (res.ok && data.success) {
+      chrome.storage.local.clear(() => {
+        location.reload();
+      });
+      return;
+    }
+
+    errBox.innerText = data.message || data.error || "Нууц үг буруу байна";
+  } catch {
+    errBox.innerText = "Сервертэй холбогдож чадсангүй";
+  }
 };
 
 function showView(viewName) {

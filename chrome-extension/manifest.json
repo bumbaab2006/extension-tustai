@@ -1,23 +1,48 @@
 {
   "manifest_version": 3,
-  "name": "SafeKid AI Guard",
-  "version": "2.0",
-  "description": "Multi-user AI хяналтын систем",
-  "permissions": ["storage", "webNavigation", "tabs"],
+  "name": "Safe-kid",
+  "version": "2.0.0",
+  "description": "Parental control extension that tracks visited URLs and time spent, applies blocks, and syncs with the Safe-kid dashboard.",
+  "permissions": [
+    "storage",
+    "webNavigation",
+    "tabs"
+  ],
   "host_permissions": [
-    "https://parent-panel-backend.onrender.com/*",
-    "<all_urls>"
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
+    "default_title": "Safe-kid"
   },
   "web_accessible_resources": [
     {
-      "resources": ["blocked.html", "login_required.html"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "blocked.html",
+        "login_required.html"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
     }
-  ]
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "homepage_url": "https://tsevermongolchuud.vercel.app",
+  "short_name": "Safe-kid"
 }

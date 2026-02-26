@@ -40,11 +40,19 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.webNavigation.onBeforeNavigate.addListener(
   async (details) => {
     if (details.frameId !== 0) return;
+    if (!Number.isInteger(details.tabId) || details.tabId < 0) return;
     const url = details.url;
     if (!url.startsWith("http")) return;
 
-    const storage = await chrome.storage.local.get(["activeChildId"]);
-    if (!storage.activeChildId) return;
+    const storage = await chrome.storage.local.get(["activeChildId", "parentToken"]);
+    if (!storage.activeChildId) {
+      if (storage.parentToken) {
+        chrome.tabs.update(details.tabId, {
+          url: chrome.runtime.getURL("login_required.html"),
+        });
+      }
+      return;
+    }
 
     try {
       const res = await fetch(`${BASE_URL}/check-url`, {
@@ -97,11 +105,28 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 });
 
 async function handleTabChange(newTabId) {
-  const tab = await chrome.tabs.get(newTabId).catch(() => null);
+  const normalizedTabId = Number.isFinite(Number(newTabId)) ? Number(newTabId) : null;
+  if (!Number.isInteger(normalizedTabId)) {
+    await stopTracking();
+    return;
+  }
+
+  const tab = await chrome.tabs.get(normalizedTabId).catch(() => null);
 
   // Хэрэв хүчингүй таб бол (Settings, New Tab г.м) -> ЗОГСООНО
   if (!tab || !tab.url || !tab.url.startsWith("http")) {
     console.log("⏸️ Tracking Paused (Non-http page)");
+    await stopTracking();
+    return;
+  }
+
+  const authState = await chrome.storage.local.get(["activeChildId", "parentToken"]);
+  if (!authState.activeChildId) {
+    if (authState.parentToken) {
+      chrome.tabs.update(normalizedTabId, {
+        url: chrome.runtime.getURL("login_required.html"),
+      });
+    }
     await stopTracking();
     return;
   }
@@ -111,14 +136,14 @@ async function handleTabChange(newTabId) {
   // Хэрэв өмнөх домайнтай ИЖИЛ байвл тоолуурыг ЗОГСООХГҮЙ
   if (trackingTimer && currentDomain === newDomain) {
     console.log(`🔄 Same domain (${newDomain}). Keeping timer alive.`);
-    currentTabId = newTabId;
+    currentTabId = normalizedTabId;
     currentUrl = tab.url;
     return;
   }
 
   // Хэрэв өөр домайн бол (Facebook -> YouTube) -> ШИНЭЭР ЭХЭЛНЭ
   await stopTracking();
-  startTracking(newTabId, tab.url, newDomain);
+  startTracking(normalizedTabId, tab.url, newDomain);
 }
 
 async function stopTracking() {
@@ -151,7 +176,7 @@ function startTracking(tabId, url, domain) {
 }
 
 async function tick() {
-  if (!currentTabId || !currentDomain) return;
+  if (!Number.isInteger(currentTabId) || !currentDomain) return;
 
   const now = Date.now();
   accumulatedMs += now - (lastTickAt || now);

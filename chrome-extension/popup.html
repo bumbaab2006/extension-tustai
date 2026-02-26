@@ -26,8 +26,16 @@
         width: 360px;
         margin: 0;
         background: var(--bg);
-        font-family: "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui,
-          -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+        font-family:
+          "SF Pro Text",
+          "SF Pro Display",
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
         color: var(--text);
       }
 
@@ -146,7 +154,9 @@
         font-size: 13px;
         outline: none;
         background: #fff;
-        transition: border 0.15s, box-shadow 0.15s;
+        transition:
+          border 0.15s,
+          box-shadow 0.15s;
       }
 
       input:focus {
@@ -165,7 +175,9 @@
         cursor: pointer;
         background: var(--accent);
         color: white;
-        transition: transform 0.05s, box-shadow 0.15s;
+        transition:
+          transform 0.05s,
+          box-shadow 0.15s;
         box-shadow: 0 10px 16px rgba(37, 99, 235, 0.2);
       }
 
@@ -234,6 +246,9 @@
         color: var(--muted);
         text-align: center;
       }
+      .df {
+        color: #dfdfdf;
+      }
     </style>
   </head>
 
@@ -244,7 +259,7 @@
           <div class="logo">SK</div>
           <div>
             <h1>SafeKid</h1>
-            <p>Parent control extension</p>
+            <p class="df">Parent control extension</p>
           </div>
         </div>
       </div>
@@ -285,7 +300,9 @@
           <h3>Хамгаалалт идэвхтэй</h3>
           <div id="active-user-name">User</div>
           <p>Бодит цагийн хяналт ажиллаж байна.</p>
-          <button id="btn-switch-user" class="secondary">Хэрэглэгч солих</button>
+          <button id="btn-switch-user" class="secondary">
+            Хэрэглэгч солих
+          </button>
         </div>
 
         <div id="view-logout-confirm" class="hidden">
