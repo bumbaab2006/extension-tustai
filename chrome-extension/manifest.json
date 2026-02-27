@@ -1,17 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Safe-kid",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Parental control extension that tracks visited URLs and time spent, applies blocks, and syncs with the Safe-kid dashboard.",
-  "permissions": [
-    "storage",
-    "webNavigation",
-    "tabs"
-  ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+  "permissions": ["storage", "webNavigation", "tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -27,14 +20,8 @@
   },
   "web_accessible_resources": [
     {
-      "resources": [
-        "blocked.html",
-        "login_required.html"
-      ],
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ]
+      "resources": ["blocked.html", "login_required.html"],
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
   "icons": {

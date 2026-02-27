@@ -31,9 +31,46 @@ function getDomain(url) {
   }
 }
 
+function normalizeChildId(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
+async function getActiveChildState() {
+  const storage = await chrome.storage.local.get([
+    "activeChildId",
+    "lastActiveChildId",
+    "parentToken",
+  ]);
+  const activeChildId = normalizeChildId(storage.activeChildId);
+  const lastActiveChildId = normalizeChildId(storage.lastActiveChildId);
+  if (activeChildId) {
+    if (activeChildId != lastActiveChildId) {
+      try {
+        await chrome.storage.local.set({ lastActiveChildId: activeChildId });
+      } catch {
+        // ignore storage errors
+      }
+    }
+    return { activeChildId, parentToken: storage.parentToken };
+  }
+
+  const fallbackChildId = lastActiveChildId;
+  if (fallbackChildId) {
+    try {
+      await chrome.storage.local.set({ activeChildId: fallbackChildId });
+    } catch {
+      // ignore storage errors
+    }
+    return { activeChildId: fallbackChildId, parentToken: storage.parentToken };
+  }
+
+  return { activeChildId: null, parentToken: storage.parentToken };
+}
+
 // 1. Browser эхлэх үед
 chrome.runtime.onStartup.addListener(() => {
-  chrome.storage.local.remove(["activeChildId", "authApiBaseUrl", "apiBaseUrl"]);
+  chrome.storage.local.remove(["authApiBaseUrl", "apiBaseUrl"]);
 });
 
 // 2. Navigation Monitor (Сайт руу орох үед БЛОК хийх эсэхийг шалгах)
@@ -44,9 +81,10 @@ chrome.webNavigation.onBeforeNavigate.addListener(
     const url = details.url;
     if (!url.startsWith("http")) return;
 
-    const storage = await chrome.storage.local.get(["activeChildId", "parentToken"]);
-    if (!storage.activeChildId) {
-      if (storage.parentToken) {
+    const authState = await getActiveChildState();
+    const activeChildId = authState.activeChildId;
+    if (!activeChildId) {
+      if (authState.parentToken) {
         chrome.tabs.update(details.tabId, {
           url: chrome.runtime.getURL("login_required.html"),
         });
@@ -58,7 +96,7 @@ chrome.webNavigation.onBeforeNavigate.addListener(
       const res = await fetch(`${BASE_URL}/check-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ childId: storage.activeChildId, url: url }),
+        body: JSON.stringify({ childId: activeChildId, url: url }),
       });
       if (!res.ok) return;
 
@@ -120,8 +158,9 @@ async function handleTabChange(newTabId) {
     return;
   }
 
-  const authState = await chrome.storage.local.get(["activeChildId", "parentToken"]);
-  if (!authState.activeChildId) {
+  const authState = await getActiveChildState();
+  const activeChildId = authState.activeChildId;
+  if (!activeChildId) {
     if (authState.parentToken) {
       chrome.tabs.update(normalizedTabId, {
         url: chrome.runtime.getURL("login_required.html"),
@@ -224,8 +263,9 @@ async function flushPending(reason) {
 // Сервер рүү мэдээлэл илгээх
 async function sendPing(url, tabId, durationSeconds, reason) {
   try {
-    const storage = await chrome.storage.local.get(["activeChildId"]);
-    if (!storage.activeChildId) return false;
+    const authState = await getActiveChildState();
+    const activeChildId = authState.activeChildId;
+    if (!activeChildId) return false;
 
     console.log(`📡 Sending ${durationSeconds}s Data (${reason}): ${url}`);
 
@@ -233,7 +273,7 @@ async function sendPing(url, tabId, durationSeconds, reason) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        childId: storage.activeChildId,
+        childId: activeChildId,
         url: url,
         duration: durationSeconds,
       }),

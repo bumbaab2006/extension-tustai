@@ -8,6 +8,11 @@ async function readJsonSafe(response) {
   }
 }
 
+function normalizeChildId(value) {
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+}
+
 const views = {
   parentLogin: document.getElementById("view-parent-login"),
   childSelect: document.getElementById("view-child-select"),
@@ -24,18 +29,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     "parentEmail",
     "activeChildId",
     "activeChildName",
+    "lastActiveChildId",
+    "lastActiveChildName",
     "childrenList",
   ]);
 
   if (!data.parentToken) {
     showView("parentLogin");
-  } else if (data.activeChildId) {
-    document.getElementById("active-user-name").innerText =
-      data.activeChildName;
-    showView("dashboard");
   } else {
-    renderChildList(data.childrenList || []);
-    showView("childSelect");
+    const storedActiveId = normalizeChildId(data.activeChildId);
+    const fallbackActiveId = normalizeChildId(data.lastActiveChildId);
+    const activeChildId = storedActiveId || fallbackActiveId;
+    const children = Array.isArray(data.childrenList)
+      ? data.childrenList
+      : [];
+    const childFromList = activeChildId
+      ? children.find((child) => normalizeChildId(child.id) === activeChildId)
+      : null;
+    const activeChildName =
+      data.activeChildName || childFromList?.name || data.lastActiveChildName;
+
+    if (activeChildId && activeChildName) {
+      if (!storedActiveId || !data.activeChildName) {
+        chrome.storage.local.set({ activeChildId, activeChildName });
+      }
+      document.getElementById("active-user-name").innerText = activeChildName;
+      showView("dashboard");
+    } else {
+      renderChildList(children);
+      showView("childSelect");
+    }
   }
 });
 
@@ -124,18 +147,26 @@ document.getElementById("btn-verify-pin").onclick = async () => {
     return;
   }
 
+  const normalizedChildId = normalizeChildId(selectedChildTemp.id);
+  if (!normalizedChildId) {
+    errBox.innerText = "Хүүхдийн ID буруу байна";
+    return;
+  }
+
   try {
     const res = await fetch(`${AUTH_API_BASE}/verify-pin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ childId: selectedChildTemp.id, pin }),
+      body: JSON.stringify({ childId: normalizedChildId, pin }),
     });
     const data = await readJsonSafe(res);
 
     if (res.ok && data.success) {
       chrome.storage.local.set({
-        activeChildId: selectedChildTemp.id,
+        activeChildId: normalizedChildId,
         activeChildName: selectedChildTemp.name,
+        lastActiveChildId: normalizedChildId,
+        lastActiveChildName: selectedChildTemp.name,
       });
       document.getElementById("active-user-name").innerText =
         selectedChildTemp.name;
@@ -158,14 +189,17 @@ document.getElementById("btn-back-select").onclick = () =>
   showView("childSelect");
 
 document.getElementById("btn-switch-user").onclick = () => {
-  chrome.storage.local.remove(["activeChildId", "activeChildName"], () => {
-    showView("childSelect");
-    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-      if (tabs[0]?.id) {
-        chrome.tabs.reload(tabs[0].id);
-      }
-    });
-  });
+  chrome.storage.local.remove(
+    ["activeChildId", "activeChildName", "lastActiveChildId", "lastActiveChildName"],
+    () => {
+      showView("childSelect");
+      chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        if (tabs[0]?.id) {
+          chrome.tabs.reload(tabs[0].id);
+        }
+      });
+    },
+  );
 };
 
 document.getElementById("btn-p-logout").onclick = () =>
