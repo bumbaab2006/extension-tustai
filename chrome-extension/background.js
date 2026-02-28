@@ -249,17 +249,45 @@ async function stopAndFlush() {
       const authState = await getActiveChildState();
       const childId = authState.activeChildId;
       if (childId) {
-        // "keepalive: true" нь Service Worker унтсан ч fetch-ийг дуусгахад тусалдаг
-        fetch(`${BASE_URL}/track-time`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            childId,
-            url: currentTracking.url,
-            duration,
-          }),
-          keepalive: true,
-        }).catch((err) => console.error("Flush failed", err));
+        try {
+          // "keepalive: true" нь Service Worker унтсан ч fetch-ийг дуусгахад тусалдаг
+          const trackRes = await fetch(`${BASE_URL}/track-time`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              childId,
+              url: currentTracking.url,
+              duration,
+            }),
+            keepalive: true,
+          });
+          const trackPayload = await readJsonSafe(trackRes);
+
+          // Limit шинэчлэгдсэний дараа тухайн идэвхтэй хуудсыг дахин шалгаж блок шийдвэрийг даруй хэрэгжүүлнэ.
+          if (trackRes.ok && trackPayload?.status === "BLOCK") {
+            const [activeTab] = await chrome.tabs.query({
+              active: true,
+              currentWindow: true,
+            });
+            if (activeTab?.id && activeTab.url && activeTab.url.startsWith("http")) {
+              const checkRes = await fetch(`${BASE_URL}/check-url`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ childId, url: activeTab.url }),
+              });
+              if (checkRes.ok) {
+                const checkData = await readJsonSafe(checkRes);
+                if (checkData?.action === "BLOCK") {
+                  await chrome.tabs.update(activeTab.id, {
+                    url: chrome.runtime.getURL("blocked.html"),
+                  });
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Flush failed", err);
+        }
       }
     }
   }
